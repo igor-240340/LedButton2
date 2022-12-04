@@ -3,39 +3,39 @@
 .def tmp = r16
 .def ledArray = r20
 
-.equ START_PIN = 0                                          ; Start button pin
-.equ STOP_PIN = 0                                           ; Stop button pin
+.equ START_BTN_INT = INT0
+.equ STOP_BTN_INT = INT1
 
 .org 0x00
                 jmp Reset
                 jmp StartPressed
                 jmp StopPressed
 
-Reset:          ldi tmp, low(RAMEND)                        ; Stack Pointer
+Reset:          ldi tmp, low(RAMEND)                                ; Stack Pointer
                 out SPL, tmp
                 ldi tmp, high(RAMEND)
                 out SPH, tmp
 
-                ser tmp                                     ; Potr B out
+                ser tmp                                             ; Potr B out
                 out DDRB, tmp
                 out PORTB, tmp
             
-                clr tmp                                     ; Port D in
+                clr tmp                                             ; Port D in
                 out DDRD, tmp
-                ldi tmp, 0b00001100                         ; Pull-up resistors
+                ldi tmp, 0b00001100                                 ; Pull-up resistors
                 out PORTD, tmp
 
-                ldi tmp, (1 << INT0 | 1 << INT1)            ; Enable INT0, INT1
+                ldi tmp, (1 << STOP_BTN_INT)                        ; Enable stop button
                 out EIMSK, tmp
-                ldi tmp, (0b00 << ISC00 | 0b00 << ISC10)    ; By low level
+                ldi tmp, (0b00 << ISC00 | 0b00 << ISC10)            ; Trigger all interrupts by low level
                 sts EICRA, tmp
 
-                sei                                         ; Enable all interrupts
+                sei                                                 ; Enable all interrupts
 
                 sec
-                set                                         ; Left shift flag
+                set                                                 ; Left shift flag
 
-                ldi ledArray, 0b11011111
+                ldi ledArray, 0b11000001
 
 MainLoop:       out PORTB, ledArray
                 rcall Delay500ms
@@ -46,28 +46,36 @@ MainLoop:       out PORTB, ledArray
 
                 brts LeftShift
 
-                sbrs ledArray, 0
+                sbrc ledArray, 1
                 set
                 ror ledArray
                 rjmp MainLoop
 
-EmptyLoop:      rjmp EmptyLoop
-
 LeftShift:      sbrc ledArray, 4
                 clt
-                sec
+                clc
                 rol ledArray
                 rjmp MainLoop
 
-StartPressed:   pop tmp
-                pop tmp
-                reti
+StopPressed:    ldi tmp, (0 << STOP_BTN_INT | 1 << START_BTN_INT)   ; Diasble stop button. Enable start button
+                out EIMSK, tmp
 
-StopPressed:    ldi tmp, LOW(EmptyLoop)
+                ldi tmp, LOW(EmptyLoop)
                 push tmp
                 ldi tmp, HIGH(EmptyLoop)
                 push tmp
+
                 reti
+
+StartPressed:   ldi tmp, (1 << STOP_BTN_INT | 0 << START_BTN_INT)   ; Enable stop button. Disable start button
+                out EIMSK, tmp
+
+                pop tmp                                             ; Prevent to return on EmptyLoop
+                pop tmp
+
+                reti
+
+EmptyLoop:      rjmp EmptyLoop
 
 Delay500ms:     ldi r19, 100
 Dec0:           ldi r17, 249
